@@ -16,6 +16,7 @@ local iter = vim.iter
 ---@class Queue
 local Queue = {}
 Queue.__index = Queue
+Queue.__metatable = 0
 
 function Queue:new()
   local o = {
@@ -81,6 +82,8 @@ local Rejection = {
   data = nil,
   message = "error in future execution",
 }
+Rejection.__index = Rejection
+Rejection.__metatable = 0
 
 ---@generic T
 ---@class Future<T>
@@ -95,6 +98,7 @@ local Future = {
   task = nil,
 }
 Future.__index = Future
+Future.__metatable = Future
 
 local next_id = 0
 local function free_id()
@@ -140,7 +144,7 @@ function Future:reject(cause, message)
   if message then
     o.message = message
   end
-  self.result = setmetatable(o, { __index = Rejection })
+  self.result = setmetatable(o, Rejection)
 end
 
 function Future:poll()
@@ -169,7 +173,9 @@ function Future:await(callback)
       end
     end
   elseif callback == nil then
-    error("Future:await must be called from an async context or with a callback")
+    error(
+      "Future:await must be called from an async context or with a callback"
+    )
   else
     local status, result = self:poll()
     if status == Status.Pending then
@@ -212,6 +218,7 @@ end
 ---@field running boolean
 ---@field loop uv.uv_timer_t
 local Scheduler = {}
+Scheduler.__index = Scheduler
 
 function Scheduler:new()
   local o = {
@@ -219,7 +226,7 @@ function Scheduler:new()
     running = false,
     loop = vim.loop.new_timer(),
   }
-  setmetatable(o, { __index = Scheduler })
+  setmetatable(o, Scheduler)
   return o
 end
 
@@ -237,8 +244,8 @@ function Scheduler:tick()
 end
 
 function Scheduler:start()
+  -- require("savior").utils.progress.start("scheduler running")
   self.running = true
-  vim.print("scheduler starting")
   if not self.loop then
     self.loop = vim.loop.new_timer()
   end
@@ -252,7 +259,7 @@ function Scheduler:start()
 end
 
 function Scheduler:on_close()
-  vim.print("scheduler shutdown")
+  require("savior").utils.progress.stop("scheduler shutdown")
 end
 
 function Scheduler:cleanup()
@@ -304,7 +311,10 @@ function Scheduler:spawn(future)
         return unpack(results)
       end)
     else
-      error("Scheduler:spawn expects a Future or list of futures")
+      error(
+        "Scheduler:spawn expects a Future or list of futures, found "
+          .. type(future)
+      )
     end
   end
   self.queue:enqueue(future)
@@ -358,7 +368,8 @@ local function job(cmd)
   return async(function(reject)
     local val
     vim.system(cmd, { text = true }, function(obj)
-      local code, signal, stdout, stderr = obj.code, obj.signal, obj.stdout, obj.stderr
+      local code, signal, stdout, stderr =
+        obj.code, obj.signal, obj.stdout, obj.stderr
 
       if code == 0 then
         val = obj
@@ -410,6 +421,8 @@ end
 --     end
 --   end)
 -- end)
+
+vim.print(job({ "git", "status" }))
 
 return {
   with_scheduler = with_scheduler,
