@@ -51,11 +51,17 @@ function Queue:clear()
   self._len = 0
 end
 
-function Queue:is_empty() return self._len == 0 end
+function Queue:is_empty()
+  return self._len == 0
+end
 
-function Queue:len() return self._len end
+function Queue:len()
+  return self._len
+end
 
-function Queue:__tostring() return vim.inspect(self._buffer) end
+function Queue:__tostring()
+  return vim.inspect(self._buffer)
+end
 
 ---@enum Status
 local Status = {
@@ -131,7 +137,9 @@ function Future:reject(cause, message)
   local o = {
     cause = cause,
   }
-  if message then o.message = message end
+  if message then
+    o.message = message
+  end
   self.result = setmetatable(o, { __index = Rejection })
 end
 
@@ -156,16 +164,18 @@ end
 function Future:await(callback)
   if coroutine.isyieldable() then
     while self:poll() == Status.Pending do
-      if coroutine.isyieldable() then coroutine.yield() end
+      if coroutine.isyieldable() then
+        coroutine.yield()
+      end
     end
   elseif callback == nil then
-    error(
-      "Future:await must be called from an async context or with a callback"
-    )
+    error("Future:await must be called from an async context or with a callback")
   else
     local status, result = self:poll()
     if status == Status.Pending then
-      vim.defer_fn(function() self:await(callback) end, 50)
+      vim.defer_fn(function()
+        self:await(callback)
+      end, 50)
     else
       callback(status, result)
     end
@@ -220,25 +230,41 @@ function Scheduler:tick()
     local to_run = self.queue:dequeue()
 
     local status = poll(to_run)
-    if status == Status.Pending then self.queue:enqueue(to_run) end
+    if status == Status.Pending then
+      self.queue:enqueue(to_run)
+    end
   end
 end
 
 function Scheduler:start()
   self.running = true
   vim.print("scheduler starting")
-  if not self.loop then self.loop = vim.loop.new_timer() end
-  self.loop:start(100, 100, vim.schedule_wrap(function() self:tick() end))
+  if not self.loop then
+    self.loop = vim.loop.new_timer()
+  end
+  self.loop:start(
+    100,
+    100,
+    vim.schedule_wrap(function()
+      self:tick()
+    end)
+  )
 end
 
-function Scheduler:on_close() vim.print("scheduler shutdown") end
+function Scheduler:on_close()
+  vim.print("scheduler shutdown")
+end
 
 function Scheduler:cleanup()
   self.queue:clear()
   self.running = false
-  if self.loop:is_active() then self.loop:stop() end
+  if self.loop:is_active() then
+    self.loop:stop()
+  end
   if not self.loop:is_closing() then
-    self.loop:close(vim.schedule_wrap(function() self:on_close() end))
+    self.loop:close(vim.schedule_wrap(function()
+      self:on_close()
+    end))
   end
   self.loop = nil
 end
@@ -282,14 +308,18 @@ function Scheduler:spawn(future)
     end
   end
   self.queue:enqueue(future)
-  if not self.running then self:start() end
+  if not self.running then
+    self:start()
+  end
   return future
 end
 
 local function mpsc()
   local queue = Queue:new()
 
-  function tx(data) queue:enqueue(data) end
+  function tx(data)
+    queue:enqueue(data)
+  end
 
   local rx = async(function()
     while queue:is_empty() do
@@ -305,7 +335,9 @@ local function oneshot()
   local data
 
   local function tx(d)
-    if not data then data = d end
+    if not data then
+      data = d
+    end
   end
 
   local rx = async(function()
@@ -319,13 +351,14 @@ local function oneshot()
 end
 
 local function job(cmd)
-  if type(cmd) == "string" then cmd = { cmd } end
+  if type(cmd) == "string" then
+    cmd = { cmd }
+  end
 
   return async(function(reject)
     local val
     vim.system(cmd, { text = true }, function(obj)
-      local code, signal, stdout, stderr =
-        obj.code, obj.signal, obj.stdout, obj.stderr
+      local code, signal, stdout, stderr = obj.code, obj.signal, obj.stdout, obj.stderr
 
       if code == 0 then
         val = obj
@@ -346,6 +379,12 @@ local function job(cmd)
   end)
 end
 
+local function with_scheduler(fn)
+  local sc = Scheduler:new()
+  fn(sc)
+  sc:cleanup()
+end
+
 ---------------------------------------------------
 --                                               --
 ------------------ Testing stuff ------------------
@@ -362,25 +401,18 @@ end
 --   end)
 -- end
 --
--- local senders = {}
--- for _ = 1, 5 do
---   table.insert(senders, sleep(math.random() * 5000))
--- end
---
--- senders[#senders + 1] = rx
---
--- local sc1 = Scheduler:new()
---
--- sc1:spawn(job({ "git status" })):await(function(status, result)
---   if status == Status.Resolved then
---     vim.notify(result.stdout)
---   else
---     vim.notify(result.cause, vim.log.levels.ERROR)
---   end
---   sc1:cleanup()
+-- with_scheduler(function(s)
+--   s:spawn(job({ "git", "status" })):await(function(status, result)
+--     if status == Status.Resolved then
+--       vim.notify(result.stdout)
+--     else
+--       vim.notify(result.cause, vim.log.levels.ERROR)
+--     end
+--   end)
 -- end)
 
 return {
+  with_scheduler = with_scheduler,
   async = async,
   Future = Future,
   Scheduler = Scheduler,
