@@ -166,6 +166,7 @@ end
 
 --- @param callback function Only used if called from a non-async context
 function Future:await(callback)
+  -- selene: allow(incorrect_standard_library_use)
   if coroutine.isyieldable() then
     while self:poll() == Status.Pending do
       if coroutine.isyieldable() then
@@ -421,8 +422,8 @@ end
 --     end
 --   end)
 -- end)
-
-vim.print(job({ "git", "status" }))
+--
+-- vim.print(job({ "git", "status" }))
 
 return {
   with_scheduler = with_scheduler,
