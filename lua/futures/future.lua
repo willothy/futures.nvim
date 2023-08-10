@@ -67,7 +67,7 @@ function Future:poll()
   return self.status, self.result
 end
 
---- @param callback function Only used if called from a non-async context
+--- @param callback fun(status, result)? Only used if called from a non-async context
 function Future:await(callback)
   -- selene: allow(incorrect_standard_library_use)
   if coroutine.isyieldable() then
@@ -76,10 +76,6 @@ function Future:await(callback)
         coroutine.yield()
       end
     end
-  elseif callback == nil then
-    error(
-      "Future:await must be called from an async context or with a callback"
-    )
   else
     local status, result = self:poll()
     if status == Status.Pending then
